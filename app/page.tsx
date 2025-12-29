@@ -1,91 +1,35 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { themes } from "./themes";
+import { useState } from "react";
 
-type PagesType = {
+type Pages = {
   home: string;
   about: string;
+  services: string;
   contact: string;
 };
 
-type Project = {
-  id: string;
-  name: string;
-  pages: PagesType;
-  theme: string;
-};
-
-export default function HomePage() {
-  // 🔐 Auth
-  const [user, setUser] = useState<string | null>(null);
-
-  // 📁 Projects
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-
-  // 🧠 Builder states
-  const [description, setDescription] = useState(""); // 🔴 renamed from prompt
-  const [theme, setTheme] = useState<keyof typeof themes>("modern");
+export default function Home() {
+  const [prompt, setPrompt] = useState("");
+  const [pages, setPages] = useState<Pages | null>(null);
+  const [activePage, setActivePage] = useState<keyof Pages>("home");
   const [loading, setLoading] = useState(false);
-  const [activePage, setActivePage] =
-    useState<keyof PagesType>("home");
 
-  const previewRef = useRef<HTMLDivElement | null>(null);
+  // 🔴 CREDITS STATE (FREE TRIAL)
+  const [credits, setCredits] = useState(3);
 
-  const activeProject = projects.find(
-    (p) => p.id === activeProjectId
-  );
+  const generateWebsite = async () => {
+    // ❌ NO CREDITS CHECK
+    if (credits <= 0) {
+      alert("No credits left. Please buy more credits.");
+      return;
+    }
 
-  // 🔹 Load user & projects
-  useEffect(() => {
-    const u = localStorage.getItem("user");
-    const p = localStorage.getItem("projects");
+    if (!prompt) {
+      alert("Please enter a prompt");
+      return;
+    }
 
-    if (u) setUser(u);
-    if (p) setProjects(JSON.parse(p));
-  }, []);
-
-  // 🔹 Save projects
-  useEffect(() => {
-    localStorage.setItem("projects", JSON.stringify(projects));
-  }, [projects]);
-
-  // 🔐 LOGIN (FIXED)
-  const login = () => {
-    const name = window.prompt("Enter your name");
-    if (!name) return;
-
-    setUser(name);
-    localStorage.setItem("user", name);
-  };
-
-  const logout = () => {
-    setUser(null);
-    setProjects([]);
-    setActiveProjectId(null);
-    localStorage.clear();
-  };
-
-  // ➕ Create project
-  const createProject = () => {
-    const name = window.prompt("Project name?");
-    if (!name) return;
-
-    const newProject: Project = {
-      id: crypto.randomUUID(),
-      name,
-      theme,
-      pages: { home: "", about: "", contact: "" },
-    };
-
-    setProjects((prev) => [...prev, newProject]);
-    setActiveProjectId(newProject.id);
-  };
-
-  // 🤖 Generate website
-  const handleGenerate = async () => {
-    if (!description.trim() || !activeProject) return;
     setLoading(true);
 
     try {
@@ -94,33 +38,20 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: `
-Create a professional 3-page website.
-
-Each page must be full HTML with inline CSS.
-
-Pages:
-- Home
-- About
-- Contact
-
-Theme instructions:
-${themes[theme].prompt}
-
-Website description:
-${description}
-          `,
+Generate a 4-page website in JSON format with keys:
+home, about, services, contact.
+Each value should be pure HTML body content using Tailwind CSS.
+Website idea: ${prompt}
+`,
         }),
       });
 
       const data = await res.json();
+      setPages(JSON.parse(data.html));
+      setActivePage("home");
 
-      setProjects((prev) =>
-        prev.map((p) =>
-          p.id === activeProject.id
-            ? { ...p, pages: data, theme }
-            : p
-        )
-      );
+      // ✅ CREDIT CUT AFTER SUCCESS
+      setCredits((c) => c - 1);
     } catch {
       alert("Generation failed");
     } finally {
@@ -128,124 +59,92 @@ ${description}
     }
   };
 
-  // 🔐 LOGIN SCREEN
-  if (!user) {
-    return (
-      <main className="h-screen flex items-center justify-center">
-        <button
-          onClick={login}
-          className="bg-black text-white px-6 py-3 rounded"
-        >
-          Login to Builder
-        </button>
-      </main>
-    );
-  }
+  const iframeContent = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-8">
+${
+  pages
+    ? pages[activePage]
+    : "<p style='color:gray'>Preview will appear here</p>"
+}
+</body>
+</html>
+`;
 
   return (
-    <main className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between mb-6">
-        <h1 className="text-2xl font-bold">
-          Welcome, {user}
-        </h1>
-        <button onClick={logout} className="underline">
-          Logout
-        </button>
-      </div>
+    <div className="flex h-screen bg-zinc-900 text-white">
+      {/* LEFT NAV */}
+      <aside className="w-56 bg-zinc-800 p-4 border-r border-zinc-700">
+        <h2 className="font-semibold mb-4">Pages</h2>
 
-      {/* Projects */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={createProject}
-          className="border px-3 py-1"
-        >
-          + New Project
-        </button>
+        {(["home", "about", "services", "contact"] as (keyof Pages)[]).map(
+          (page) => (
+            <button
+              key={page}
+              onClick={() => setActivePage(page)}
+              disabled={!pages}
+              className={`w-full mb-2 px-3 py-2 rounded text-left ${
+                activePage === page
+                  ? "bg-red-500"
+                  : "bg-zinc-700 hover:bg-zinc-600"
+              }`}
+            >
+              {page.toUpperCase()}
+            </button>
+          )
+        )}
+      </aside>
 
-        {projects.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setActiveProjectId(p.id)}
-            className={`border px-3 py-1 ${
-              p.id === activeProjectId
-                ? "bg-black text-white"
-                : ""
-            }`}
-          >
-            {p.name}
-          </button>
-        ))}
-      </div>
-
-      {!activeProject && (
-        <p>Create or select a project 👆</p>
-      )}
-
-      {activeProject && (
-        <>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe your website..."
-            className="border p-2 w-full mb-3"
+      {/* PREVIEW */}
+      <main className="flex-1 p-4 bg-zinc-950">
+        <div className="h-full bg-white rounded overflow-hidden">
+          <iframe
+            title="Preview"
+            srcDoc={iframeContent}
+            className="w-full h-full"
           />
+        </div>
+      </main>
 
-          {/* Themes */}
-          <div className="flex gap-2 mb-3">
-            {Object.entries(themes).map(([k, t]) => (
-              <button
-                key={k}
-                onClick={() => setTheme(k as any)}
-                className={`border px-3 py-1 ${
-                  theme === k
-                    ? "bg-black text-white"
-                    : ""
-                }`}
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
+      {/* RIGHT PANEL */}
+      <aside className="w-80 bg-zinc-800 p-4 border-l border-zinc-700">
+        <h2 className="font-semibold mb-2">AI Website Builder</h2>
 
-          <button
-            onClick={handleGenerate}
-            className="bg-black text-white px-5 py-2 mb-4"
-          >
-            {loading ? "Generating..." : "Generate Website"}
-          </button>
+        {/* 🔢 CREDITS DISPLAY */}
+        <p className="text-sm text-gray-300 mb-3">
+          Credits left:{" "}
+          <span className="font-bold text-white">{credits}</span>
+        </p>
 
-          {/* Tabs */}
-          <div className="flex gap-2 mb-2">
-            {(["home", "about", "contact"] as const).map(
-              (p) => (
-                <button
-                  key={p}
-                  onClick={() => setActivePage(p)}
-                  className={`border px-3 py-1 ${
-                    activePage === p
-                      ? "bg-black text-white"
-                      : ""
-                  }`}
-                >
-                  {p.toUpperCase()}
-                </button>
-              )
-            )}
-          </div>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Describe your website idea..."
+          className="w-full h-40 p-3 bg-zinc-900 border border-zinc-700 rounded"
+        />
 
-          {/* Preview */}
-          {activeProject.pages[activePage] && (
-            <div
-              ref={previewRef}
-              className="border p-4 bg-white min-h-[400px]"
-              dangerouslySetInnerHTML={{
-                __html:
-                  activeProject.pages[activePage],
-              }}
-            />
-          )}
-        </>
-      )}
-    </main>
+        <button
+          onClick={generateWebsite}
+          disabled={loading}
+          className="mt-4 w-full bg-red-500 hover:bg-red-600 py-2 rounded disabled:opacity-50"
+        >
+          {loading ? "Generating..." : "Generate Website"}
+        </button>
+
+        {/* (Stripe button next step) */}
+        <button
+          disabled
+          className="mt-3 w-full bg-indigo-500 py-2 rounded opacity-60 cursor-not-allowed"
+        >
+          Buy Credits (Next Step)
+        </button>
+      </aside>
+    </div>
   );
 }
